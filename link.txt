@@ -16,11 +16,14 @@ Wiki & Source Code:
     https://elixir.bootlin.com/linux/latest/source
     https://lwn.net/Kernel/
     https://www.youtube.com/watch?v=L2SED6sewRw
+    https://lkml.iu.edu/hypermail/linux/kernel/
+    https://tldp.org/LDP/tlk/tlk-toc.html
 
 
 
 Linux Patch: 
     https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/
     http://gunkies.org/wiki/Category:Linux
+    https://unix.stackexchange.com/questions/46077/where-to-download-linux-kernel-source-code-of-a-specific-version
     0.01   :  https://github.com/zavg/linux-0.01
     
