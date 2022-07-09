@@ -37,11 +37,13 @@ void buffer_init(void);
 #define Z_MAP_SLOTS 8
 #define SUPER_MAGIC 0x137F
 
-#define NR_OPEN 20
-#define NR_INODE 32
-#define NR_FILE 64
-#define NR_SUPER 8
-#define NR_HASH 307
+#define NR_OPEN 20 // XXX: Max open file a process can have.
+#define NR_INODE 32 // XXX: We use inode table, at OS level.\
+                    // How may max INODE We can keep.\
+                    // See inode.c
+#define NR_FILE 64 // XXX: size of file table in OS 
+#define NR_SUPER 8 // XXX: No of super blocks
+#define NR_HASH 307 // XXX: No Hash_Table_lists for the buffer. See : struct buffer_head * hash_table[NR_HASH];
 #define NR_BUFFERS nr_buffers
 #define BLOCK_SIZE 1024
 #ifndef NULL
@@ -53,14 +55,24 @@ void buffer_init(void);
 
 typedef char buffer_block[BLOCK_SIZE];
 
+/*
+ *
+ * XXX:
+ *      Buffer
+ *      Read blocks from the disk, and put into buffer.
+ *      Buffer is in RAM, so it is limited.
+ *      See - Buffer will be having device number + Block number
+ *            Which will be uniqe combination within the machine.
+ */
 struct buffer_head {
 	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned short b_dev;		/* device (0 = free) */
 	unsigned short b_blocknr;	/* block number */
 	unsigned char b_uptodate;
-	unsigned char b_dirt;		/* 0-clean,1-dirty */
+	unsigned char b_dirt;		/* 0-clean,1-dirty */ //XXX: dirty blocks are the blocks with changed content.  
+                                                //     So these blocks are required to write back into disk.
 	unsigned char b_count;		/* users using this block */
-	unsigned char b_lock;		/* 0 - ok, 1 -locked */
+	unsigned char b_lock;		/* 0 - ok, 1 -locked */ // XXX: We can put lock on block level.
 	struct task_struct * b_wait;
 	struct buffer_head * b_prev;
 	struct buffer_head * b_next;
@@ -68,6 +80,9 @@ struct buffer_head {
 	struct buffer_head * b_next_free;
 };
 
+// XXX:
+//      d_inode contains the data
+//      of inode which is in disk.
 struct d_inode {
 	unsigned short i_mode;
 	unsigned short i_uid;
@@ -78,6 +93,10 @@ struct d_inode {
 	unsigned short i_zone[9];
 };
 
+// XXX:
+//      m_inode contains d_inode and
+//      other info about inode, which
+//      is present only in memory.
 struct m_inode {
 	unsigned short i_mode;
 	unsigned short i_uid;
@@ -87,14 +106,15 @@ struct m_inode {
 	unsigned char i_nlinks;
 	unsigned short i_zone[9];
 /* these are in memory also */
+  // XXX: ALL the mem_var are not being used
 	struct task_struct * i_wait;
 	unsigned long i_atime;
 	unsigned long i_ctime;
 	unsigned short i_dev;
-	unsigned short i_num;
+	unsigned short i_num; // XXX: INode number.
 	unsigned short i_count;
-	unsigned char i_lock;
-	unsigned char i_dirt;
+	unsigned char i_lock; // XXX: lock on whole file or not.
+	unsigned char i_dirt; // XXX: inode have been changed, i_dirt have to written back in disk,
 	unsigned char i_pipe;
 	unsigned char i_mount;
 	unsigned char i_seek;
@@ -109,6 +129,18 @@ struct m_inode {
 #define INC_PIPE(head) \
 __asm__("incl %0\n\tandl $4095,%0"::"m" (head))
 
+
+// XXX: FD of process is a file pointer
+//      It is a open file, for a process
+//      FD are file pointers with will point
+//      to one of the enty in file table.
+//
+//      A process can have NR_OPEN = 20, FDs
+//
+//      File Table, contails file for OS.
+//      size of file table = NR_FILE = 64
+//      search "struct file file_table[NR_FILE]" 
+//
 struct file {
 	unsigned short f_mode;
 	unsigned short f_flags;
@@ -127,8 +159,8 @@ struct super_block {
 	unsigned long s_max_size;
 	unsigned short s_magic;
 /* These are only in memory */
-	struct buffer_head * s_imap[8];
-	struct buffer_head * s_zmap[8];
+	struct buffer_head * s_imap[8]; // for inodes, in mem. XXX: All the inode beloging to perticular filesystem. 
+	struct buffer_head * s_zmap[8]; // for blocks, in mem. XXX. All the block beloging to perticular filesystem. 
 	unsigned short s_dev;
 	struct m_inode * s_isup;
 	struct m_inode * s_imount;
@@ -137,14 +169,25 @@ struct super_block {
 	unsigned char s_dirt;
 };
 
+// XXX:
+//      In directry, inode contains the
+//      subdirectry/files name with inode
+//      in its data blocks.
+//      SO HERE NAME OF THE FILE IS STORED
+//      as directry entry.
+//      see find_entry() for more detail
 struct dir_entry {
 	unsigned short inode;
 	char name[NAME_LEN];
 };
 
-extern struct m_inode inode_table[NR_INODE];
-extern struct file file_table[NR_FILE];
-extern struct super_block super_block[NR_SUPER];
+
+// XXX:
+//    process fd -> file table -> inode table
+//
+extern struct m_inode inode_table[NR_INODE]; // XXX: inode table
+extern struct file file_table[NR_FILE]; // XXX: file table
+extern struct super_block super_block[NR_SUPER]; // XXX: super blocks
 extern struct buffer_head * start_buffer;
 extern int nr_buffers;
 

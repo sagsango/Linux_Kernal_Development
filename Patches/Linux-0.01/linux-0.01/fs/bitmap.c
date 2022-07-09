@@ -36,6 +36,42 @@ __asm__("cld\n" \
 	:"=c" (__res):"c" (0),"S" (addr):"ax","dx","si"); \
 __res;})
 
+
+  /*
+   *
+   * XXX:
+   *      Dev will be having one file system.
+   *      (Files are just way of organization
+   *       of the disk space efficienlty, why
+   *       we need to, and if need we can do
+   *       that.)
+   *
+   *      Superblock:
+   *      All the file system related info will
+   *      be on the superblock.
+   *      You can access inodes bitmap and block bitmap
+   *      Bitmap is index of of inode number + block number 
+   *
+   *      You have to store inode + data_block
+   *      we use inode_table:
+   *        superblock -> s_imap -> inode -> buffer -> block.
+   *      we use buffer here for block: 
+   *        superblock -> s_zmap -> data_block -> buffer -> block.
+   *
+   *      disk read/write basic unit in block.
+   *      file = inode + data block.
+   *             inode will be stored on disk block
+   *             data block will be stored on disk block
+   *
+   *      So we have a lot of buffer so we
+   *      create hash of (dev,block) and
+   *      put that in hash_key buffer list.
+   *      see :
+   *          get_hash_table(dev,block)
+   *          hash_table[NR_HASH]
+   *
+   */
+
 void free_block(int dev, int block)
 {
 	struct super_block * sb;
