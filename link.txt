@@ -26,4 +26,5 @@ Linux Patch:
     http://gunkies.org/wiki/Category:Linux
     https://unix.stackexchange.com/questions/46077/where-to-download-linux-kernel-source-code-of-a-specific-version
     0.01   :  https://github.com/zavg/linux-0.01
+    1.0    :  https://github.com/kalamangga-net/linux-1.0
     
