@@ -33,6 +33,7 @@ static inline void unlock_inode(struct m_inode * inode)
 	wake_up(&inode->i_wait);
 }
 
+/* XXX:XXX write dirty inode in disk */
 void sync_inodes(void)
 {
 	int i;
@@ -162,12 +163,26 @@ repeat:
 
 static volatile int last_allocated_inode = 0;
 
+
+
+/*
+ * XXX:XXX
+ * Get in memory inode structure
+ * We have to check in inode_table
+ * there are NR_INODE = 32, slots
+ * we have to find empty slot
+ *
+ *
+ * See how we find empty slot
+ * We travers in the ring, for it
+ */
 struct m_inode * get_empty_inode(void)
 {
 	struct m_inode * inode;
 	int inr;
 
-	while (1) {
+	while (1) { // XXX:XXX loop untill 
+              // there is a free slot
 		inode = NULL;
 		inr = last_allocated_inode;
 		do {
@@ -199,6 +214,13 @@ struct m_inode * get_empty_inode(void)
 	return inode;
 }
 
+/*XXX:XXX
+ *    Whole page have been given 
+ *    to a pipe inode.
+ *
+ *    NOTE: pipe inode is only 
+ *    in memory structure
+ */
 struct m_inode * get_pipe_inode(void)
 {
 	struct m_inode * inode;
@@ -215,13 +237,21 @@ struct m_inode * get_pipe_inode(void)
 	return inode;
 }
 
+/*
+ * XXX:XXX
+ *     inode  = (dev + nr)
+ *     for give (dev + nr) return an in memory
+ *     inode structure
+ */
 struct m_inode * iget(int dev,int nr)
 {
 	struct m_inode * inode, * empty;
 
 	if (!dev)
 		panic("iget with dev==0");
-	empty = get_empty_inode();
+	empty = get_empty_inode(); // XXX:XXX get in a memory structure inode, from inode table 
+
+  // XXX:XXX Search if inode already in inode_table
 	inode = inode_table;
 	while (inode < NR_INODE+inode_table) {
 		if (inode->i_dev != dev || inode->i_num != nr) {
@@ -236,13 +266,19 @@ struct m_inode * iget(int dev,int nr)
 		inode->i_count++;
 		if (empty)
 			iput(empty);
-		return inode;
+		return inode; // XXX:XXX return alredy present inode
 	}
 	if (!empty)
 		return (NULL);
+  // XXX:XXX If inode is not already preset 
+  //         return an empty inode.
 	inode=empty;
 	inode->i_dev = dev;
 	inode->i_num = nr;
+  // XXX:XXX 
+  // read the d_inode
+  // means inode info
+  // present in the disk
 	read_inode(inode);
 	return inode;
 }
@@ -255,6 +291,9 @@ static void read_inode(struct m_inode * inode)
 
 	lock_inode(inode);
 	sb=get_super(inode->i_dev);
+  // See O(1) access to reach inode block
+  // inode are just index of block
+  // after the superblock
 	block = 2 + sb->s_imap_blocks + sb->s_zmap_blocks +
 		(inode->i_num-1)/INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev,block)))
@@ -274,6 +313,9 @@ static void write_inode(struct m_inode * inode)
 
 	lock_inode(inode);
 	sb=get_super(inode->i_dev);
+  // See O(1) access to reach inode block
+  // inode are just index of block
+  // after the superblock
 	block = 2 + sb->s_imap_blocks + sb->s_zmap_blocks +
 		(inode->i_num-1)/INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev,block)))

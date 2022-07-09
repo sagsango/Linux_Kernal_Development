@@ -197,10 +197,10 @@ void brelse(struct buffer_head * buf)
 {
 	if (!buf)
 		return;
-	wait_on_buffer(buf);
+	wait_on_buffer(buf); // XXX:XXX Lock
 	if (!(buf->b_count--))
 		panic("Trying to free free buffer");
-	wake_up(&buffer_wait);
+	wake_up(&buffer_wait); // XXX:XXX Unlock
 }
 
 /*
