@@ -72,11 +72,17 @@ __res;})
    *
    */
 
+
+  /*XXX:XXX
+   *    Free block of the given device
+   *    Free the block + update the s_zmap( Zone map)
+   */
 void free_block(int dev, int block)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
 
+  // clear the block
 	if (!(sb = get_super(dev)))
 		panic("trying to free block on nonexistent device");
 	if (block < sb->s_firstdatazone || block >= sb->s_nzones)
@@ -93,6 +99,9 @@ void free_block(int dev, int block)
 		brelse(bh);
 	}
 	block -= sb->s_firstdatazone - 1 ;
+
+  // update the s_zmap
+  // XXX:XXX ????? how - struct buffer_head * s_zmap[8]; 
 	if (clear_bit(block&8191,sb->s_zmap[block/8192]->b_data)) {
 		printk("block (%04x:%d) ",dev,block+sb->s_firstdatazone-1);
 		panic("free_block: bit already cleared");
@@ -100,12 +109,17 @@ void free_block(int dev, int block)
 	sb->s_zmap[block/8192]->b_dirt = 1;
 }
 
+/*XXX:XXX
+ *    Allocate the block in given device,
+ *    Aloocate the block + update the s_zmap
+ */
 int new_block(int dev)
 {
 	struct buffer_head * bh;
 	struct super_block * sb;
 	int i,j;
 
+  // get free block from map
 	if (!(sb = get_super(dev)))
 		panic("trying to get new block from nonexistant device");
 	j = 8192;
@@ -115,16 +129,20 @@ int new_block(int dev)
 				break;
 	if (i>=8 || !bh || j>=8192)
 		return 0;
+  // update the s_zmap
+  // XXX:XXX ????? how - struct buffer_head * s_imap[8];
 	if (set_bit(j,bh->b_data))
 		panic("new_block: bit already set");
 	bh->b_dirt = 1;
 	j += i*8192 + sb->s_firstdatazone-1;
 	if (j >= sb->s_nzones)
 		return 0;
+  // load the block
 	if (!(bh=getblk(dev,j)))
 		panic("new_block: cannot get block");
 	if (bh->b_count != 1)
 		panic("new block: count is != 1");
+  // update in memory structure
 	clear_block(bh->b_data);
 	bh->b_uptodate = 1;
 	bh->b_dirt = 1;
@@ -132,11 +150,17 @@ int new_block(int dev)
 	return j;
 }
 
+/*
+ * XXX:XXX 
+ *     Free a given inode
+ *     free the inode + update the s_imap
+ */
 void free_inode(struct m_inode * inode)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
 
+  // check if free op is valid
 	if (!inode)
 		return;
 	if (!inode->i_dev) {
@@ -153,14 +177,23 @@ void free_inode(struct m_inode * inode)
 		panic("trying to free inode on nonexistent device");
 	if (inode->i_num < 1 || inode->i_num > sb->s_ninodes)
 		panic("trying to free inode 0 or nonexistant inode");
+  // update the map
 	if (!(bh=sb->s_imap[inode->i_num>>13]))
 		panic("nonexistent imap in superblock");
 	if (clear_bit(inode->i_num&8191,bh->b_data))
 		panic("free_inode: bit already cleared");
 	bh->b_dirt = 1;
+  // clean in memory structure
 	memset(inode,0,sizeof(*inode));
 }
 
+/*
+ * XXX:XXX
+ *     Get a inode from given device
+ *     get in memory structure + \
+ *     check free node from superblock map + \
+ *     update map after taking
+ */
 struct m_inode * new_inode(int dev)
 {
 	struct m_inode * inode;
@@ -168,10 +201,12 @@ struct m_inode * new_inode(int dev)
 	struct buffer_head * bh;
 	int i,j;
 
+  // get in memory structure
 	if (!(inode=get_empty_inode()))
 		return NULL;
 	if (!(sb = get_super(dev)))
 		panic("new_inode with unknown device");
+  // get free inode form s_imap
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if (bh=sb->s_imap[i])
@@ -181,8 +216,10 @@ struct m_inode * new_inode(int dev)
 		iput(inode);
 		return NULL;
 	}
+  // update the s_imap
 	if (set_bit(j,bh->b_data))
 		panic("new_inode: bit already set");
+  // update the in memory structure
 	bh->b_dirt = 1;
 	inode->i_count=1;
 	inode->i_nlinks=1;

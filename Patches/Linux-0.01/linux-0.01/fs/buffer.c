@@ -11,6 +11,10 @@
 #include <linux/kernel.h>
 #include <asm/system.h>
 
+/*
+ * BUFFER SIZE = BLOCK SIZE
+ * Because buffer is for block read
+ */
 #if (BUFFER_END & 0xfff)
 #error "Bad BUFFER_END value"
 #endif
@@ -21,11 +25,13 @@
 
 extern int end;
 struct buffer_head * start_buffer = (struct buffer_head *) &end;
-struct buffer_head * hash_table[NR_HASH];
-static struct buffer_head * free_list;
+struct buffer_head * hash_table[NR_HASH]; // buffer list, using hash of (device, block)
+static struct buffer_head * free_list; // free list of buffers aviable.
 static struct task_struct * buffer_wait = NULL;
 int NR_BUFFERS = 0;
 
+
+// locking
 static inline void wait_on_buffer(struct buffer_head * bh)
 {
 	cli();
@@ -34,6 +40,10 @@ static inline void wait_on_buffer(struct buffer_head * bh)
 	sti();
 }
 
+
+// write back dirty ( inodes + buffer )
+// into the disk/dev
+// NOTE: inodes are in inode_table
 int sys_sync(void)
 {
 	int i;
@@ -49,6 +59,8 @@ int sys_sync(void)
 	return 0;
 }
 
+// write back the dirty blocks
+// of dev/disk
 static int sync_dev(int dev)
 {
 	int i;
@@ -68,26 +80,48 @@ static int sync_dev(int dev)
 #define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)
 #define hash(dev,block) hash_table[_hashfn(dev,block)]
 
+
+/*
+ * remove the in memory buffer from
+ * hash queue & free list
+ */
 static inline void remove_from_queues(struct buffer_head * bh)
 {
+/*
+#define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)
+#define hash(dev,block) hash_table[_hashfn(dev,block)]
+*/
+
 /* remove from hash-queue */
 	if (bh->b_next)
 		bh->b_next->b_prev = bh->b_prev;
 	if (bh->b_prev)
 		bh->b_prev->b_next = bh->b_next;
-	if (hash(bh->b_dev,bh->b_blocknr) == bh)
+	if (hash(bh->b_dev,bh->b_blocknr) == bh) // If its the head
 		hash(bh->b_dev,bh->b_blocknr) = bh->b_next;
 /* remove from free list */
 	if (!(bh->b_prev_free) || !(bh->b_next_free))
 		panic("Free block list corrupted");
 	bh->b_prev_free->b_next_free = bh->b_next_free;
 	bh->b_next_free->b_prev_free = bh->b_prev_free;
-	if (free_list == bh)
+	if (free_list == bh) // If its the first
 		free_list = bh->b_next_free;
 }
 
+
+
+
+/*
+ * insert a buffer into in memory 
+ * free buffers + hash queue if ( have div + block )
+ */
 static inline void insert_into_queues(struct buffer_head * bh)
 {
+/*
+#define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)
+#define hash(dev,block) hash_table[_hashfn(dev,block)]
+*/
+
 /* put at end of free list */
 	bh->b_next_free = free_list;
 	bh->b_prev_free = free_list->b_prev_free;
@@ -103,6 +137,12 @@ static inline void insert_into_queues(struct buffer_head * bh)
 	bh->b_next->b_prev = bh;
 }
 
+
+
+/*
+ * find buffer for given dev block
+ * from hash table list
+ */
 static struct buffer_head * find_buffer(int dev, int block)
 {		
 	struct buffer_head * tmp;
@@ -119,6 +159,13 @@ static struct buffer_head * find_buffer(int dev, int block)
  * something might happen to it while we sleep (ie a read-error
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
+ *
+ * XXX:XXX
+ *     Check the buff in hash table list,
+ *     If  buff is not there return NULL
+ *     wait if someone is using it
+ *     check if it has not been reclaimed
+ *     return 
  */
 struct buffer_head * get_hash_table(int dev, int block)
 {
@@ -136,10 +183,15 @@ repeat:
 	return bh;
 }
 
+
 /*
  * Ok, this is getblk, and it isn't very clear, again to hinder
  * race-conditions. Most of the code is seldom used, (ie repeating),
  * so it should be much more efficient than it looks.
+ *
+ * XXX:XXX
+ *     Check if block is present in the hash table list, return
+ *     Go to the free list of buffer, and find a free block
  */
 struct buffer_head * getblk(int dev,int block)
 {
@@ -172,7 +224,8 @@ repeat:
  * conditions.
  */
 	if (tmp->b_dirt)
-		sync_dev(tmp->b_dev);
+		sync_dev(tmp->b_dev); // XXX:XXX WE WRITE BACK THE BUFFER INTO DISK, ONLY WHEN WE NEED THAT 
+                          //         BUFFER, WHICH IS NOT BEING USED, BUT IS DIRTY.
 /* update buffer contents */
 	tmp->b_dev=dev;
 	tmp->b_blocknr=block;
@@ -182,7 +235,7 @@ repeat:
  * added "this" block already, so check for that. Thank God for goto's.
  */
 	if (find_buffer(dev,block)) {
-		tmp->b_dev=0;		/* ok, someone else has beaten us */
+		tmp->b_dev=0;		/* ok, someone else has beaten us, (allocated already) */
 		tmp->b_blocknr=0;	/* to it - free this block and */
 		tmp->b_count=0;		/* try again */
 		insert_into_queues(tmp);
@@ -193,6 +246,10 @@ repeat:
 	return tmp;
 }
 
+
+// XXX:XXX We write back dirty block, on
+//         relaimnation of the block
+//         by someone
 void brelse(struct buffer_head * buf)
 {
 	if (!buf)
@@ -206,6 +263,10 @@ void brelse(struct buffer_head * buf)
 /*
  * bread() reads a specified block and returns the buffer that contains
  * it. It returns NULL if the block was unreadable.
+ *
+ *
+ * XXX:XXX
+ *     read the block,
  */
 struct buffer_head * bread(int dev,int block)
 {
@@ -222,6 +283,18 @@ struct buffer_head * bread(int dev,int block)
 	return (NULL);
 }
 
+
+/*
+ * 1/
+ * Make all the buffers clear
+ * Which are just inside Raw Ram.
+ * from start location to end.
+ *
+ * They are not even in the free list of blocks
+ *
+ * 2/
+ * Make all hash list NULL
+ */
 void buffer_init(void)
 {
 	struct buffer_head * h = start_buffer;
