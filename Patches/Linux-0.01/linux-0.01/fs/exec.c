@@ -12,6 +12,8 @@ extern int sys_exit(int exit_code);
 extern int sys_close(int fd);
 
 /*
+ * XXX:XXX RAM for a process given as pages
+ *
  * MAX_ARG_PAGES defines the number of pages allocated for arguments
  * and envelope for the new program. 32 should suffice, this gives
  * a maximum env+arg of 128kB !
@@ -30,8 +32,26 @@ __asm__("pushl $0x10\n\t" \
 	:"cx","di","si")
 
 /*
+ * 
  * read_head() reads blocks 1-6 (not 0). Block 0 has already been
  * read for header information.
+ *
+ * XXX:XXX
+ *     See above comment, so inode is just 8 blocks.
+ *     0      :  contains the header info(see in do_execve().
+ *     1-6    :  direct block
+ *     7      :  1st level indirect block
+ *     8      :  2nd level indirect block
+ *
+ *
+ * XXX:XXX 
+ *     load first 6 blocks of
+ *     the source code inode
+ *     into the process_address_apace/page(RAM).
+ *
+ *     ????? Are there direct blocks
+ *           Because bellow we are 
+ *           reading the indirect blocks
  */
 int read_head(struct m_inode * inode,int blocks)
 {
@@ -51,6 +71,24 @@ int read_head(struct m_inode * inode,int blocks)
 	return 0;
 }
 
+
+/*
+ * XXX:XXX
+ *     Read 1st level indirect blocks into process address_space/pages/memory.
+ *     dev   : device number
+ *     ind   : block with contais
+ *             the block number of
+ *             the indirect blocks
+ *     size  : total size, of the
+ *             data to be read from
+ *             the indirect blocks
+ *
+ * load the ceil(size/BLOCK_SIZE) number of blocks
+ * into the RAM (Pages, vertual address space),
+ * starting from the given offset of the Vertual Address Space
+ * of the process
+ *
+ */
 int read_ind(int dev,int ind,long size,unsigned long offset)
 {
 	struct buffer_head * ih, * bh;
@@ -64,7 +102,10 @@ int read_ind(int dev,int ind,long size,unsigned long offset)
 		return 0;
 	if (!(ih=bread(dev,ind)))
 		return -1;
-	table = (unsigned short *) ih->b_data;
+	table = (unsigned short *) ih->b_data; // store the block number into table var
+                                         // do first entry of the block is block number
+                                         // because we are just inreasething that var
+                                         // by 1 to 
 	while (size>0) {
 		if (block=*(table++))
 			if (!(bh=bread(dev,block))) {
@@ -83,6 +124,11 @@ int read_ind(int dev,int ind,long size,unsigned long offset)
 
 /*
  * read_area() reads an area into %fs:mem.
+ *
+ *
+ * XXX:XXX
+ *     Read the executable into 
+ *     process address_space/RAM/memory
  */
 int read_area(struct m_inode * inode,long size)
 {
@@ -90,14 +136,20 @@ int read_area(struct m_inode * inode,long size)
 	unsigned short * table;
 	int i,count;
 
+  // First read 1-6 direct blocks
 	if ((i=read_head(inode,(size+BLOCK_SIZE-1)/BLOCK_SIZE)) ||
 	    (size -= BLOCK_SIZE*6)<=0)
 		return i;
+  // Then read 1st level indirect blocks, which block number
+  // is in direct block number 7, i_zone[7] block.
+  // there can be 512 entries of indirect blocks.
 	if ((i=read_ind(inode->i_dev,inode->i_zone[7],size,BLOCK_SIZE*6)) ||
 	    (size -= BLOCK_SIZE*512)<=0)
 		return i;
 	if (!(i=inode->i_zone[8]))
 		return 0;
+  // read direct 8th block, which contains the 
+  // 2nd - level indirect block entries.
 	if (!(dind = bread(inode->i_dev,i)))
 		return -1;
 	table = (unsigned short *) dind->b_data;
@@ -105,10 +157,12 @@ int read_area(struct m_inode * inode,long size)
 		if ((i=read_ind(inode->i_dev,*(table++),size,
 		    BLOCK_SIZE*(518+count))) || (size -= BLOCK_SIZE*512)<=0)
 			return i;
+  // now executable size is greater than
+  // (6 * BLOCK_SIZE) + (512 * BLOCK_SIZE) + (512 * 512 * BLOCK_SIZE) 
 	panic("Impossibly long executable");
 }
 
-/*
+/* XXX:XXX ?????
  * create_tables() parses the env- and arg-strings in new user
  * memory and creates the pointer tables from them, and puts their
  * addresses on the "stack", returning the new stack pointer value.
@@ -154,7 +208,7 @@ static int count(char ** argv)
 	return i;
 }
 
-/*
+/* XXX ?????
  * 'copy_string()' copies argument/envelope strings from user
  * memory to free pages in kernel mem. These are in a format ready
  * to be put directly into the top of new user memory.
@@ -191,6 +245,10 @@ static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	return p;
 }
 
+/*
+ * XXX:XXX
+ *     process's virual memory limit
+ */
 static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 {
 	unsigned long code_limit,data_limit,code_base,data_base;
@@ -216,7 +274,7 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	return data_limit;
 }
 
-/*
+/* XXX: See How process is being created.
  * 'do_execve()' executes a new program.
  */
 int do_execve(unsigned long * eip,long tmp,char * filename,
@@ -225,7 +283,7 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	struct m_inode * inode;
 	struct buffer_head * bh;
 	struct exec ex;
-	unsigned long page[MAX_ARG_PAGES];
+	unsigned long page[MAX_ARG_PAGES]; // Page is just noting an array, of index of frame. 
 	int i,argc,envc;
 	unsigned long p;
 
@@ -251,6 +309,8 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 		iput(inode);
 		return -ENOEXEC;
 	}
+
+// XXX: read first direct block
 	if (!(bh = bread(inode->i_dev,inode->i_zone[0]))) {
 		iput(inode);
 		return -EACCES;
@@ -265,23 +325,38 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	}
 	if (N_TXTOFF(ex) != BLOCK_SIZE)
 		panic("N_TXTOFF != BLOCK_SIZE. See a.out.h.");
+
+  //XXX: copy argv, envp into pages.
+  //     if requied get_free_page() and
+  //     init ref in pages[] of process
 	argc = count(argv);
 	envc = count(envp);
 	p = copy_strings(envc,envp,page,PAGE_SIZE*MAX_ARG_PAGES-4);
-	p = copy_strings(argc,argv,page,p);
+	p = copy_strings(argc,argv,page,p) ;
+
+  //XXX: Not successfull free the pages
+  //     held by the process, and fail execve
 	if (!p) {
 		for (i=0 ; i<MAX_ARG_PAGES ; i++)
 			free_page(page[i]);
-		iput(inode);
+		iput(inode); // Free only inode struct in case of non pipe inode
+                 // To free pages we have called free_page explicitly.
 		return -1;
 	}
+
+
 /* OK, This is the point of no return */
+
+
+// XXX:make all signal_handler function to NULL
 	for (i=0 ; i<32 ; i++)
 		current->sig_fn[i] = NULL;
+// XXX: close the fd, if close on exec is true  
 	for (i=0 ; i<NR_OPEN ; i++)
 		if ((current->close_on_exec>>i)&1)
 			sys_close(i);
 	current->close_on_exec = 0;
+  // XXX: ????? Update the pages
 	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
 	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
 	if (last_task_used_math == current)
@@ -289,17 +364,26 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	current->used_math = 0;
 	p += change_ldt(ex.a_text,page)-MAX_ARG_PAGES*PAGE_SIZE;
 	p = (unsigned long) create_tables((char *)p,argc,envc);
+  // XXX: Define the upper limit on process address space. 
 	current->brk = ex.a_bss +
-		(current->end_data = ex.a_data +
-		(current->end_code = ex.a_text));
-	current->start_stack = p & 0xfffff000;
+		(current->end_data = ex.a_data +  // data 
+		(current->end_code = ex.a_text)); // text/executable 
+                                      // Heap will grow bottom to top
+                                      // means brk to above
+	current->start_stack = p & 0xfffff000; // stack will grow top to bottom
+  // XXX: read the executable into proceess address space
 	i = read_area(inode,ex.a_text+ex.a_data);
-	iput(inode);
+	iput(inode); // Free inode structure, not pages
 	if (i<0)
-		sys_exit(-1);
+		sys_exit(-1); // free the resource, 
+                  // ( pages + .... )
+                  // NULL the task in global task table
+                  // give SIGCHLD, to its parent.
+                  // call sheduler() function.
 	i = ex.a_text+ex.a_data;
-	while (i&0xfff)
+	while (i&0xfff) // XXX: ?????
 		put_fs_byte(0,(char *) (i++));
+  // XXX: ?????
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	return 0;

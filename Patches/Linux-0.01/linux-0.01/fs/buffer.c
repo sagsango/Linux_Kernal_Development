@@ -250,6 +250,9 @@ repeat:
 // XXX:XXX We write back dirty block, on
 //         relaimnation of the block
 //         by someone
+//
+//         brelse is just decrementing refcount
+//         by 1
 void brelse(struct buffer_head * buf)
 {
 	if (!buf)
@@ -287,8 +290,12 @@ struct buffer_head * bread(int dev,int block)
 /*
  * 1/
  * Make all the buffers clear
+ * and make a free block list
  * Which are just inside Raw Ram.
  * from start location to end.
+ * 
+ * Free block list are just, an array
+ * in the begining.
  *
  * They are not even in the free list of blocks
  *

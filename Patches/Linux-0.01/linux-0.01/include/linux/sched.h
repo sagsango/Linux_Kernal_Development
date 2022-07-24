@@ -131,9 +131,9 @@ struct task_struct {
 	}, \
 }
 
-extern struct task_struct *task[NR_TASKS];
+extern struct task_struct *task[NR_TASKS]; // XXX: gloabl task/process table
 extern struct task_struct *last_task_used_math;
-extern struct task_struct *current;
+extern struct task_struct *current; // XXX: pointer to current, task.process
 extern long volatile jiffies;
 extern long startup_time;
 

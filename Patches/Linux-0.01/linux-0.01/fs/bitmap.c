@@ -153,7 +153,7 @@ int new_block(int dev)
 /*
  * XXX:XXX 
  *     Free a given inode
- *     free the inode + update the s_imap
+ *     free the inode in inode_table + update the s_imap
  */
 void free_inode(struct m_inode * inode)
 {
@@ -190,7 +190,7 @@ void free_inode(struct m_inode * inode)
 /*
  * XXX:XXX
  *     Get a inode from given device
- *     get in memory structure + \
+ *     get in memory structure from inode_table+ \
  *     check free node from superblock map + \
  *     update map after taking
  */

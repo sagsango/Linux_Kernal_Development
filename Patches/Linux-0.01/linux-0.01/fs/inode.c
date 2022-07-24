@@ -124,7 +124,19 @@ int create_block(struct m_inode * inode, int block)
 {
 	return _bmap(inode,block,1);
 }
-		
+
+/*
+ * XXX:
+ * Use 1: In do_execve()
+ * (inode struct + all the data) is
+ * loded as executable in process's
+ * page (RAM), now iput(), will
+ * free only the inode not
+ * the page resource.
+ *
+ * Use 2:
+ * Free the pipe inode + pages for it.
+ */
 void iput(struct m_inode * inode)
 {
 	if (!inode)
@@ -149,11 +161,12 @@ void iput(struct m_inode * inode)
 repeat:
 	if (!inode->i_nlinks) {
 		truncate(inode);
-		free_inode(inode);
+		free_inode(inode); // Free the inode in inode-table
 		return;
 	}
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
+                        // XXX: Write back into disk
 		wait_on_inode(inode);
 		goto repeat;
 	}
@@ -305,6 +318,11 @@ static void read_inode(struct m_inode * inode)
 	unlock_inode(inode);
 }
 
+/*
+ * XXX:
+ * Write inode, in the disk.
+ * Which the help of superblock
+ */
 static void write_inode(struct m_inode * inode)
 {
 	struct super_block * sb;
@@ -313,16 +331,16 @@ static void write_inode(struct m_inode * inode)
 
 	lock_inode(inode);
 	sb=get_super(inode->i_dev);
-  // See O(1) access to reach inode block
+  // See O(1) access to reach (inode block) + (offset inside the block)
   // inode are just index of block
   // after the superblock
 	block = 2 + sb->s_imap_blocks + sb->s_zmap_blocks +
 		(inode->i_num-1)/INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev,block)))
 		panic("unable to read i-node block");
-	((struct d_inode *)bh->b_data)
-		[(inode->i_num-1)%INODES_PER_BLOCK] =
-			*(struct d_inode *)inode;
+	((struct d_inode *)bh->b_data) // block where this inode entry resides
+		[(inode->i_num-1)%INODES_PER_BLOCK] // offset inside the block where this inode entry resides 
+			= *(struct d_inode *)inode;
 	bh->b_dirt=1;
 	inode->i_dirt=0;
 	brelse(bh);
